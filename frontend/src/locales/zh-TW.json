@@ -1,0 +1,10 @@
+{
+  "welcome": "歡迎來到多租戶平台！",
+  "products": "商品",
+  "checkout": "結帳",
+  "language": "語言",
+  "order_id": "訂單編號",
+  "amount": "金額",
+  "payment_method": "支付方式",
+  "pay_now": "立即支付"
+}

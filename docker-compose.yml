@@ -1,0 +1,82 @@
+# --- Docker Compose for Multi-tenant E-commerce Platform ---
+# To start: docker-compose up -d --build
+# To stop: docker-compose down
+version: '3.8'
+
+services:
+  # Laravel Backend Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - '8000:9000'
+    volumes:
+      - ./backend:/var/www/html
+    depends_on:
+      - db
+      - redis
+    environment:
+      - DB_CONNECTION=pgsql
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_DATABASE=ecommerce_db
+      - DB_USERNAME=user
+      - DB_PASSWORD=password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+
+  # Vue.js Frontend Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - '3000:80'
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+  # PostgreSQL Database Service
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      - POSTGRES_DB=ecommerce_db
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  # Redis Cache/Queue Service
+  redis:
+    image: redis:alpine
+    restart: always
+    ports:
+      - '6379:6379'
+
+  # Prometheus Monitoring Service
+  prometheus:
+    image: prom/prometheus
+    restart: always
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    ports:
+      - '9090:9090'
+
+  # Grafana Dashboard Service
+  grafana:
+    image: grafana/grafana
+    restart: always
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports:
+      - '3001:3000'
+    depends_on:
+      - prometheus
+
+volumes:
+  db_data:
+  grafana_data:
