@@ -1,0 +1,36 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_pgsql, zip, redis
+          tools: composer
+      - name: Install backend dependencies
+        run: cd backend && composer install --no-interaction --prefer-dist
+      - name: Install frontend dependencies
+        run: cd frontend && npm install
+      - name: Build frontend assets
+        run: cd frontend && npm run build
+      - name: Copy .env
+        run: cp backend/.env.example backend/.env
+      - name: Generate key
+        run: php backend/artisan key:generate
+      - name: Run migrations
+        run: php backend/artisan migrate --force
+      - name: Run tests
+        run: vendor/bin/phpunit --coverage-text --colors=never
+        working-directory: ./backend
