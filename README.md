@@ -149,6 +149,88 @@ cd backend
 docker-compose exec backend vendor/bin/phpunit
 ```
 
+## 常見問題與解答（FAQ）
+
+以下是一些常見問題，幫助開發者理解專案的設計與實現細節：
+
+### 1. 專案採用了哪種多租戶架構？其優缺點和實現方式是什麼？
+**回答**：本專案採用**行級多租戶（Row-based Multi-tenancy）**架構，所有租戶的數據儲存在同一資料庫和資料表中，通過 `tenant_id` 欄位進行隔離。
+
+**優點**：
+- **部署簡單**：僅需單一資料庫實例和程式碼庫，降低部署和升級成本。
+- **資源效率高**：租戶共享基礎設施，適合中小規模的 SaaS 平台。
+
+**缺點**：
+- **數據隔離風險**：若程式碼邏輯有誤，可能導致數據洩漏，需嚴格的防護措施。
+- **擴展性挑戰**：隨著租戶數量增加，單一資料庫可能成為效能瓶頸。
+
+**實現方式**：
+- **子域名識別**：在 Nginx 層根據子域名（如 `tenanta.localhost`）解析 `tenant_id`，並通過自定義 Middleware 將當前租戶資訊注入應用程式。
+- **全域作用域**：為所有模型（如 `Product`、`Order`）應用 `TenantScope`，自動為查詢添加 `where('tenant_id', $currentTenantId)` 條件，確保數據隔離。
+- **資料庫設計**：所有相關資料表均包含 `tenant_id` 欄位，並建立索引以優化查詢效能。
+- **安全防護**：透過 Laravel 的 Gate 和 Policy 確保租戶間的數據訪問控制。
+
+### 2. 專案如何實現模組化設計？插件系統有什麼好處？
+**回答**：專案採用模組化設計，通過 `PluginManager` 服務實現可插拔架構，提升可擴展性和維護性。
+
+**實現方式**：
+- **服務抽象**：定義如 `NotificationService` 的介面，`PluginManager` 根據配置動態載入實作（如 `LineNotifyPlugin` 或 `SlackPlugin`）。
+- **事件驅動**：透過 Laravel 的事件系統（例如 `OrderCreated`），`PluginManager` 監聽事件並執行相應插件邏輯。
+- **模組隔離**：每個模組（如促銷、桌位管理）擁有獨立的控制器、模型和遷移檔案，降低耦合度。
+
+**好處**：
+- **可擴展性**：新增功能（如新通知管道）只需開發並註冊插件，無需修改核心程式碼。
+- **可維護性**：模組職責單一，程式碼結構清晰，便於團隊協作。
+- **靈活性**：不同租戶可啟用不同插件，滿足客製化需求。
+
+### 3. 如何使用 Prometheus 和 Grafana 捕捉業務指標？`RecordMetrics` Middleware 的作用是什麼？
+**回答**：專案整合 Prometheus 和 Grafana 進行監控，通過 `RecordMetrics` Middleware 捕捉業務指標。
+
+**實現方式**：
+- **RecordMetrics Middleware**：記錄每個 API 請求的詳細資訊，包括：
+  - **指標**：`http_requests_total`（Counter 類型），追蹤總請求數。
+  - **標籤**：記錄 `method`（如 GET/POST）、`endpoint`（如 `/api/v1/products`）和 `status_code`（如 200/404）。
+  - **儲存**：使用 Redis 作為 Prometheus 的儲存後端，支援多實例共享指標。
+- **Grafana 可視化**：透過 Prometheus 數據源，創建儀表板展示請求量、錯誤率等。
+
+**作用**：
+- 提供 API 效能洞察（如高錯誤率的端點）。
+- 支援快速故障排查，減少停機時間。
+- 結合業務邏輯（如訂單處理頻率）與技術指標，提升監控的實用性。
+
+### 4. 叫號系統如何實現即時通訊？為什麼選擇 WebSocket？
+**回答**：叫號系統利用 Laravel Echo 和 WebSocket 實現即時更新，確保顧客和管理員能即時獲取叫號狀態。
+
+**實現方式**：
+- **後端**：當叫號狀態改變（例如透過 `QueueController::advanceQueue`），觸發 `QueueUpdated` 事件並透過 WebSocket 廣播。
+- **前端**：`QueueDisplay.vue` 使用 Laravel Echo 監聽 `public-queue` 頻道，接收更新並動態刷新 UI。
+- **WebSocket 服務**：使用 Pusher 或 `laravel-websockets` 作為廣播後端。
+
+**選擇原因**：
+- **即時性**：WebSocket 提供低延遲的雙向通訊，適合叫號系統的即時需求。
+- **整合性**：Laravel Echo 與 Laravel 的事件系統無縫整合，簡化開發流程。
+- **可擴展性**：支援多租戶環境下的大量客戶端連線。
+
+### 5. 如何確保程式碼品質？開發流程是什麼？
+**回答**：專案透過自動化測試、CI/CD 和程式碼審查確保品質。
+
+**實現方式**：
+- **測試**：為核心模組（如 `QueueController`、`TableController`）撰寫 PHPUnit 功能測試，特別驗證租戶隔離邏輯。
+- **OpenAPI 文件**：維護詳細的 Swagger 文件，作為 API 測試和協作依據。
+- **CI/CD**：使用 GitHub Actions 工作流：
+  1. 搭建 Docker 環境（含 PostgreSQL 和 Redis）。
+  2. 安裝依賴並執行遷移。
+  3. 運行所有 PHPUnit 測試，確保無錯誤。
+- **開發流程**：
+  1. 本地開發並撰寫測試。
+  2. 提交程式碼並發起 Pull Request。
+  3. 等待 CI 測試通過。
+  4. 進行程式碼審查，確保品質後合併至主分支。
+
+**好處**：
+- 確保程式碼穩定性和數據隔離。
+- 自動化流程減少人為錯誤，提高交付效率。
+
 ## 關鍵代碼片段（帶註解）
 
 以下是一些關鍵代碼片段，選自倉庫中的核心代碼，並添加了詳細的中文註解以便理解：
