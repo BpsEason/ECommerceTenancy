@@ -1,0 +1,218 @@
+openapi: 3.0.0
+info:
+  title: ECommerceTenancy API
+  version: 1.0.0
+  description: Comprehensive API documentation for the multi-tenant e-commerce platform.
+servers:
+  - url: http://tenanta.localhost/api/
+    description: Tenant A's API endpoint (local)
+  - url: http://tenantb.localhost/api/
+    description: Tenant B's API endpoint (local)
+tags:
+  - name: Authentication
+    description: User registration and login
+  - name: Products
+    description: Product management for tenants
+  - name: Orders
+    description: Order creation and management
+  - name: Promotions
+    description: Promotion management with advanced rules
+  - name: Tables
+    description: Table status management for restaurants
+  - name: Queue
+    description: Queue number management for take-out and dining
+
+paths:
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - email
+                - password
+                - password_confirmation
+                - tenant_id
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+                password_confirmation:
+                  type: string
+                  format: password
+                tenant_id:
+                  type: integer
+      responses:
+        '201':
+          description: User registered successfully
+        '422':
+          description: Validation error
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Authenticate and get a JWT token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Login successful
+        '401':
+          description: Unauthorized
+
+  /queue/public:
+    get:
+      tags:
+        - Queue
+      summary: Get public queue status
+      description: Returns the currently serving number and the waiting list without authentication.
+      responses:
+        '200':
+          description: Successful retrieval of queue status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  currently_serving:
+                    type: string
+                    nullable: true
+                    description: The number currently being served.
+                  waiting_list:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        queue_number:
+                          type: string
+                        status:
+                          type: string
+                          enum: [waiting, serving]
+
+  /tables:
+    get:
+      tags:
+        - Tables
+      summary: List all tables
+      security:
+        - BearerToken: []
+      responses:
+        '200':
+          description: A list of tables
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Unauthorized
+    post:
+      tags:
+        - Tables
+      summary: Create a new table
+      security:
+        - BearerToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - number
+                - capacity
+                - status
+              properties:
+                number:
+                  type: string
+                capacity:
+                  type: integer
+                status:
+                  type: string
+                  enum: [available, occupied, reserved, cleaning]
+      responses:
+        '201':
+          description: Table created successfully
+        '422':
+          description: Validation error
+
+  /promotions:
+    get:
+      tags:
+        - Promotions
+      summary: List all promotions
+      security:
+        - BearerToken: []
+      responses:
+        '200':
+          description: A list of promotions
+    post:
+      tags:
+        - Promotions
+      summary: Create a new promotion with optional JSON rules
+      security:
+        - BearerToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - type
+                - value
+                - start_date
+                - end_date
+              properties:
+                name:
+                  type: string
+                type:
+                  type: string
+                  enum: [fixed, percentage]
+                value:
+                  type: number
+                start_date:
+                  type: string
+                  format: date-time
+                end_date:
+                  type: string
+                  format: date-time
+                rules:
+                  type: object
+                  nullable: true
+                  description: 'JSON object for complex promotion rules, e.g., {"min_amount": 100, "product_ids": [1, 2]}'
+      responses:
+        '201':
+          description: Promotion created successfully
+
+components:
+  securitySchemes:
+    BearerToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

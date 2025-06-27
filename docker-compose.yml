@@ -1,0 +1,200 @@
+services:
+  # Nginx as a gateway and load balancer
+  nginx:
+    image: nginx:latest
+    container_name: nginx_gateway
+    ports:
+      - "80:80"
+    volumes:
+      - ./monitoring/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docs:/usr/share/nginx/html/docs:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+      swagger:
+        condition: service_healthy
+      # **ENHANCEMENT: Add Grafana to dependencies**
+      grafana:
+        condition: service_healthy
+    networks:
+      - webnet
+
+  # Laravel backend service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend_app
+    restart: always
+    env_file:
+      - ./backend/.env
+    environment:
+      - REDIS_HOST=redis
+      - DB_HOST=db
+      - DB_DATABASE=ecommerce_tenancy
+      - DB_USERNAME=ecommerce_user
+      - DB_PASSWORD=password
+    volumes:
+      - ./backend:/var/www/html
+      - ./monitoring/logs/backend:/var/log/nginx # For Laravel logs
+    ports:
+      - "8000:8000"
+    networks:
+      - webnet
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      # **ENHANCEMENT: Add Fluentd as a logging driver**
+    logging:
+      driver: "fluentd"
+      options:
+        fluentd-address: fluentd:24224
+        tag: backend.laravel
+
+  # Vue.js frontend service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend_app
+    ports:
+      - "3000:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html
+    networks:
+      - webnet
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "fluentd"
+      options:
+        fluentd-address: fluentd:24224
+        tag: frontend.vue
+
+  # PostgreSQL database
+  db:
+    image: postgres:15-alpine
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_DB: ecommerce_tenancy
+      POSTGRES_USER: ecommerce_user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ecommerce_user -d ecommerce_tenancy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - webnet
+
+  # Redis for cache and queues
+  redis:
+    image: redis:alpine
+    container_name: redis_cache
+    restart: always
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - webnet
+
+  # Fluentd for centralized logging - **ENHANCEMENT: Configured for Loki**
+  fluentd:
+    image: fluent/fluentd:v1.16-debian
+    container_name: fluentd_logger
+    volumes:
+      - ./monitoring/fluentd.conf:/fluentd/etc/fluent.conf:ro
+      - ./monitoring/logs:/fluentd/log
+    ports:
+      - "24224:24224"
+      - "24224:24224/udp"
+    networks:
+      - webnet
+    depends_on:
+      - loki # **ENHANCEMENT: Depend on Loki**
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: prometheus_monitor
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command: --config.file=/etc/prometheus/prometheus.yml --web.enable-remote-write-receiver
+    ports:
+      - "9090:9090"
+    networks:
+      - webnet
+
+  # Grafana for visualization - **ENHANCEMENT: Added Grafana service**
+  grafana:
+    image: grafana/grafana:9.5.3
+    container_name: grafana_dashboard
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - webnet
+    depends_on:
+      - prometheus
+      - loki # **ENHANCEMENT: Depend on Loki**
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=password
+      - GF_SERVER_ROOT_URL=http://localhost:3001
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+
+  # Loki for log aggregation - **ENHANCEMENT: Added Loki service**
+  loki:
+    image: grafana/loki:2.8.0
+    container_name: loki_logger
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/config.yml
+    volumes:
+      - ./monitoring/loki-config.yml:/etc/loki/config.yml
+    networks:
+      - webnet
+
+  # Swagger UI for API documentation - **ENHANCEMENT: Reconfigured for OpenAPI**
+  swagger:
+    image: swaggerapi/swagger-ui
+    container_name: swagger_docs
+    ports:
+      - "8080:8080"
+    environment:
+      API_URL: /docs/api.yaml
+    volumes:
+      - ./docs:/usr/share/nginx/html/docs:ro
+    networks:
+      - webnet
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+networks:
+  webnet:
+    driver: bridge
+
+volumes:
+  db_data:
+  grafana_data:
