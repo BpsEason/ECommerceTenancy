@@ -608,6 +608,3 @@ ECommerceTenancy/
 3. 提交更改（`git commit -m "Add new feature"`）。
 4. 推送分支（`git push origin feature/new-feature`）。
 5. 創建 Pull Request。
-
-## 許可證
-本項目採用 MIT 許可證。
