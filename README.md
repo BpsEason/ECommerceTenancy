@@ -57,7 +57,7 @@ graph TD
 ### 安裝步驟
 1. **克隆專案**：
    ```bash
-   git clone https://github.com/your-username/ECommerceTenancy.git
+   git clone https://github.com/BpsEason/ECommerceTenancy.git
    cd ECommerceTenancy
    ```
 
