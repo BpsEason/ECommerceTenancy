@@ -1,369 +1,473 @@
-# ECommerceTenancy - 多租戶電商與餐飲科技平台
+# ECommerceTenancy
 
-**ECommerceTenancy** 是一個模組化的多租戶平台原型，專為電商與餐飲科技應用設計，展示 Laravel 與 Vue.js 的全端開發能力。專案支援多租戶數據隔離、線上訂單處理、模組化擴展與監控整合，適用於餐飲業的線上點餐、金流支付、促銷推薦等場景。程式碼結構清晰，適合開發者參考與快速部署。
+一個專為餐飲業設計的多租戶 SaaS 平台，使用 Laravel（後端）和 Vue.js（前端）構建。本項目提供全面的餐廳管理功能，包括叫號系統、桌位管理、促銷模組、即時通知以及進階監控功能。倉庫僅包含核心代碼，需自行安裝 Laravel 基本代碼並進行整合。
 
-## 專案亮點
-- **多租戶架構**：採用 row-based 數據隔離，支援子域名（如 `tenanta.localhost`）動態解析，適用於多餐廳或連鎖品牌管理。
-- **模組化設計**：獨立封裝租戶、商品、訂單與支付模組，支援插件系統，易於整合線上點餐或金流服務。
-- **本地化與數位行銷**：前端使用 vue-i18n 支援多語系（繁中、英文），後端動態處理貨幣格式，助力品牌國際化推廣。
-- **簡易推薦模組**：基於訂單熱門度的商品推薦，模擬餐廳促銷（如熱門餐點推薦），展示 AI 應用潛力。
-- **監控整合**：使用 Prometheus 與 Grafana 監控 API 流量與訂單指標，確保餐飲平台穩定性。
-- **高品質程式碼**：包含 PHPUnit 測試、OpenAPI 文件與 GitHub Actions CI/CD，符合現代開發標準。
-
-## 應用場景
-- **餐飲科技**：支援多餐廳線上點餐系統，透過多租戶架構為每個餐廳提供獨立數據管理，整合金流（如 ECPay）與叫號系統。
-- **數位行銷**：推薦模組可推廣熱門餐點或促銷活動，前端多語系支援品牌國際化，後端數據分析助力行銷策略優化。
-- **地方產業**：模組化設計可快速適配地方商圈需求，如美食街或校園餐廳的數位化轉型。
-
-## 技術棧
-- **後端**：Laravel 10.x、PostgreSQL、Redis
-- **前端**：Vue 3、Tailwind CSS、vue-i18n
-- **監控**：Prometheus、Grafana
-- **部署**：Docker、Docker Compose、GitHub Actions
-
-## 系統架構圖
-以下為專案架構圖，使用 Mermaid 繪製，展示模組交互與部署方式：
+## 專案架構圖
+以下是專案的整體架構圖，展示前端、後端、資料庫和監控服務之間的關係：
 
 ```mermaid
 graph TD
-    A[用戶] -->|HTTP| B[API Gateway<br>（Nginx / Kong）]
-    B --> C[Laravel 後端]
-    B --> D[Vue.js 前端]
-    
-    C -->|DB 查詢| E[PostgreSQL<br>多租戶數據]
-    C -->|快取/隊列| F[Redis]
-    C -->|事件觸發| G[Plugin Manager<br>第三方模組]
-    
-    C -->|指標收集| H[Prometheus]
-    H -->|儀表板| I[Grafana]
-    
-    subgraph 部署環境
-        J[Docker Compose]
-        J --> C
-        J --> D
-        J --> E
-        J --> F
-        J --> H
-        J --> I
-    end
+    A[Client Browser] -->|HTTP| B{Nginx Gateway}
+    B -->|Proxy /| C[Vue.js Frontend]
+    B -->|Proxy /api/| D[Laravel Backend]
+    B -->|Proxy /swagger/| E[Swagger UI]
+    B -->|Proxy /grafana/| F[Grafana Dashboard]
+
+    C -->|API Calls| D
+    D -->|SQL| G[PostgreSQL DB]
+    D -->|Cache/Queue| H[Redis]
+    D -->|WebSocket| I[Pusher/Echo]
+    D -->|Logs| J[Fluentd Logger]
+    J -->|Logs| K[Loki]
+    K -->|Log Queries| F
+    D -->|Metrics| L[Prometheus]
+    L -->|Metrics Queries| F
 ```
 
-## 安裝與部署
+**架構說明**：
+- **Nginx Gateway**：作為反向代理，處理前端、API、Swagger UI 和 Grafana 的請求，支援子域名路由（例如 `tenanta.localhost`）。
+- **Vue.js Frontend**：提供用戶界面，包括公開叫號顯示和桌位管理。
+- **Laravel Backend**：處理 API 請求，實現多租戶邏輯、認證、叫號、桌位管理和促銷。
+- **PostgreSQL**：儲存多租戶資料（用戶、產品、訂單、桌位等）。
+- **Redis**：用於快取和佇列管理。
+- **Pusher/Echo**：支援 WebSocket 即時通知（例如叫號狀態更新）。
+- **Fluentd + Loki**：集中式日誌收集與可視化。
+- **Prometheus + Grafana**：監控指標與儀表板。
 
-本專案僅包含核心程式碼，需自行安裝依賴並部署環境。以下為完整步驟：
+## 功能
+- **多租戶架構**：基於資料列的分租戶設計，支援子域名（如 `tenanta.localhost`、`tenantb.localhost`）。
+- **叫號系統**：即時外帶叫號追蹤，支援 WebSocket 更新及公開叫號顯示。
+- **桌位管理**：管理內用桌位狀態（空閒、使用中、預訂、清潔中）。
+- **促銷模組**：支援動態促銷，包含靈活的 JSON 規則。
+- **即時通知**：基於 WebSocket 的訂單狀態更新及 LINE Notify 整合。
+- **顧客行為追蹤**：記錄用戶交互行為，用於分析和行銷。
+- **高可用性部署**：使用 Nginx 作為 API 網關，包含健康檢查和 Docker Compose 部署。
+- **集中式日誌管理**：Fluentd 搭配 Loki 實現持久化日誌儲存與可視化。
+- **監控系統**：Prometheus 和 Grafana 提供效能指標和儀表板。
+- **JWT 認證**：安全的用戶註冊、登入和基於角色的訪問控制（RBAC）。
+- **API 文件**：使用 OpenAPI 和 Swagger UI 提供易於探索的 API 文件。
+- **測試覆蓋**：核心功能的全面 PHPUnit 測試（認證、叫號、促銷等）。
 
-### 環境需求
-- Docker 與 Docker Compose
-- PHP 8.3
-- Node.js 20
-- Composer
-- npm
+## 前置要求
+- Docker 和 Docker Compose
+- Node.js（前端開發）
+- PHP 8.2+ 和 Composer（後端開發）
+- 本地 hosts 文件配置子域名
 
-### 安裝步驟
-1. **克隆專案**：
+## 安裝步驟
+由於倉庫僅包含核心代碼（不含 Laravel 的基本框架檔案），您需要先安裝 Laravel 並將倉庫中的代碼整合進去。以下是詳細步驟：
+
+1. **克隆倉庫**：
    ```bash
    git clone https://github.com/BpsEason/ECommerceTenancy.git
    cd ECommerceTenancy
    ```
 
-2. **設置後端依賴**：
-   - 複製環境檔案：
+2. **設置 Laravel 專案**：
+   - 安裝一個新的 Laravel 專案（假設在 `backend` 目錄）：
      ```bash
-     cp backend/.env.example backend/.env
-     ```
-   - 安裝 Composer 依賴：
-     ```bash
+     composer create-project laravel/laravel backend
      cd backend
-     composer install
+     ```
+   - 複製倉庫中的 `backend` 目錄中的核心代碼（`app`、`database`、`routes`、`tests` 等）到新創建的 Laravel 專案中：
+     ```bash
+     cp -r ../backend/app ./app
+     cp -r ../backend/database ./database
+     cp -r ../backend/routes ./routes
+     cp -r ../backend/tests ./tests
+     cp ../backend/.env.example ./.env.example
+     ```
+   - 安裝必要的 Composer 依賴（根據 `composer.json`）：
+     ```bash
+     composer require laravel/sanctum laravel/tinker predis/predis tymon/jwt-auth laravel/breeze
+     composer require --dev fakerphp/faker laravel/pint laravel/sail mockery/mockery nunomaduro/collision phpunit/phpunit spatie/laravel-ignition
+     ```
+   - 生成應用程式密鑰和 JWT 密鑰：
+     ```bash
+     cp .env.example .env
      php artisan key:generate
-     ```
-   - 執行遷移與資料填充：
-     ```bash
-     php artisan migrate
-     php artisan db:seed --class=TenantSeeder
+     php artisan jwt:secret
      ```
 
-3. **設置前端依賴**：
-   - 在 `frontend` 目錄下，創建 `package.json`：
-     ```json
-     {
-       "name": "ecommerce-tenancy-frontend",
-       "version": "1.0.0",
-       "scripts": {
-         "dev": "vite",
-         "build": "vite build",
-         "serve": "vite preview"
-       },
-       "dependencies": {
-         "axios": "^1.6.0",
-         "vue": "^3.3.0",
-         "vue-i18n": "^9.2.0",
-         "tailwindcss": "^3.3.0",
-         "vite": "^4.4.0"
-       }
-     }
-     ```
-   - 安裝依賴並構建：
+3. **配置 Hosts 文件**：
+   在您的 hosts 文件（Linux/macOS 的 `/etc/hosts` 或 Windows 的 `C:\Windows\System32\drivers\etc\hosts`）中添加以下內容：
+   ```bash
+   127.0.0.1 tenanta.localhost
+   127.0.0.1 tenantb.localhost
+   127.0.0.1 test.localhost
+   ```
+
+4. **設置前端**：
+   - 進入 `frontend` 目錄並安裝依賴：
      ```bash
-     cd frontend
+     cd ../frontend
      npm install
-     npm run build
      ```
+   - 複製倉庫中的前端代碼（`src`、`package.json`、`vite.config.js` 等）到前端專案目錄。
 
-4. **啟動 Docker 環境**：
-   - 在專案根目錄執行：
-     ```bash
-     docker-compose up -d --build
-     ```
-   - 服務端口：
-     - Laravel 後端：`http://localhost:8000`
-     - Vue.js 前端：`http://localhost:3000`
-     - Prometheus：`http://localhost:9090`
-     - Grafana：`http://localhost:3001`（預設帳密：admin/admin）
-     - 測試租戶：`http://tenanta.localhost:8000/api/v1/products`
+5. **啟動服務**：
+   使用 Docker Compose 構建並運行所有服務（確保 `docker-compose.yml` 已從倉庫複製到根目錄）：
+   ```bash
+   cd ..
+   docker-compose up -d --build
+   ```
 
-5. **配置本地測試域名**：
-   - 編輯本地 hosts 檔案（`/etc/hosts` 或 `C:\Windows\System32\drivers\etc\hosts`）：
-     ```
-     127.0.0.1 tenanta.localhost
-     127.0.0.1 tenantb.localhost
-     ```
+6. **執行資料庫遷移和種子數據**：
+   初始化資料庫並填充範例數據：
+   ```bash
+   docker-compose exec backend php artisan migrate --seed
+   ```
 
-6. **訪問與測試**：
-   - 訪問 `http://localhost:3000` 查看前端介面（支援中英文切換）。
-   - 透過 `http://tenanta.localhost:8000/api/v1/products` 獲取租戶商品。
-   - 檢查 `http://localhost:9090`（Prometheus）與 `http://localhost:3001`（Grafana）查看監控數據。
+7. **訪問平台**：
+   - **前端**：http://localhost:3000
+   - **API 網關**：http://tenanta.localhost
+   - **API 文件（Swagger）**：http://localhost/swagger/
+   - **公開叫號顯示**：http://localhost:3000/queue/display
+   - **Grafana 儀表板**：http://localhost:3001（帳號：admin，密碼：password）
+   - **Prometheus 指標**：http://localhost:9090
 
-## 常見問題與解答
+8. **配置 Grafana**：
+   - 在 http://localhost:3001 使用 `admin/password` 登入 Grafana。
+   - 添加數據源：
+     - **Prometheus**：URL 為 `http://prometheus:9090`
+     - **Loki**：URL 為 `http://loki:3100`
+   - 創建儀表板以可視化指標和日誌。
 
-以下針對餐飲科技與數位行銷相關問題，提供技術解答，幫助開發者理解專案設計：
+## 添加新餐廳
+透過 API 創建新租戶（餐廳）：
+```bash
+curl -X POST http://localhost/api/v1/tenants \
+  -H "Content-Type: application/json" \
+  -d '{"id":"newtenant","name":"New Restaurant","subdomain":"newtenant","currency":"TWD","role":"admin","line_notify_token":"YOUR_TOKEN"}'
+```
+然後在 hosts 文件中添加 `127.0.0.1 newtenant.localhost`。
 
-### 問題 1：多租戶架構如何設計？為何選擇 row-based 隔離？
-**解答**：
-- **設計**：透過 `SetTenantFromDomain` 中間件解析子域名（如 `tenanta.localhost`），從資料庫查詢租戶並將 `tenant_id` 注入請求，實現動態租戶上下文。
-- **實現**：在 `Product` 和 `Order` 模型中使用 Laravel Global Scope，自動為查詢添加 `tenant_id` 過濾，確保餐廳數據隔離，簡化開發流程。
-- **優點**：
-  - 靈活：單一資料庫支援多餐廳數據管理，便於聚合分析（如跨餐廳銷售報表）。
-  - 成本低：無需為每家餐廳創建獨立資料庫，適合快速部署。
-  - 應用場景：適用於餐飲連鎖或美食街的數位化平台，快速支援新租戶。
-- **為何選擇 row-based**：適合餐飲科技的中小規模應用，快速迭代並降低運維成本。
-- **未來規劃**：可升級至 schema-based 隔離（獨立 schema），提升數據安全性，適合高階餐飲品牌。
-
-### 問題 2：如何實現模組化與可擴展性？
-**解答**：
-- **Plugin Manager**：`PluginManager` 服務實現事件驅動設計，支援動態插件註冊。例如，`OrderController` 在訂單創建後呼叫 `executeHook('order.created', ...)`，觸發促銷或通知。
-- **餐飲應用**：可整合叫號系統或第三方金流插件（如 ECPay），無需修改核心程式碼，適合快速適配餐廳需求。
-- **價值**：解耦業務邏輯與外部功能（如 LINE 通知、ERP 同步），提升可維護性與擴展性。
-
-### 問題 3：推薦模組的邏輯是什麼？如何改進以支援餐飲促銷？
-**解答**：
-- **當前邏輯**：`RecommendationController` 基於訂單銷量（`SUM(order_items.quantity)`）推薦熱門商品，模擬餐廳促銷場景（如推薦熱門餐點）。
-- **優點**：簡單高效，無需外部服務，適合餐飲平台原型。
-- **改進方案**：
-  - **數據來源**：納入顧客行為數據（點擊、收藏），提供個人化餐點推薦。
-  - **演算法**：採用關聯規則，分析「點 A 餐點常搭配 B 餐點」的模式，優化套餐推廣。
-  - **技術整合**：使用 FastAPI 與機器學習（如 Scikit-learn）訓練模型，透過 API 提供推薦，支援點點全球的數位行銷需求。
-
-### 問題 4：為何在 `RecordMetrics.php` 中使用 Redis 作為 Prometheus 儲存後端？
-**解答**：
-- **作用**：`RecordMetrics` 中間件收集 API 請求指標（如訂單 API 流量），供 Prometheus 抓取，支援餐飲平台監控。
-- **Redis 的必要性**：
-  - **共享數據**：多 PHP-FPM worker 需共享指標，Redis 確保數據一致性。
-  - **原子操作**：Redis 的 `INCR` 避免併發競爭，保證指標準確。
-- **餐飲應用**：監控線上點餐流量與系統性能，幫助餐廳優化運營效率。
-
-### 問題 5：為何使用 Docker 與 Docker Compose？
-**解答**：
-- **環境一致性**：Docker 確保開發、測試與生產環境一致，避免餐飲平台部署問題。
-- **依賴隔離**：後端、前端、資料庫與 Redis 獨立運行，支援多餐廳服務整合。
-- **部署簡化**：Docker Compose 一鍵部署，適合快速上線餐飲科技平台。
-- **監控優勢**：Prometheus/Grafana 提供訂單與系統指標，助力餐廳運維。
-
-### 問題 6：Schema-based 多租戶與當前設計有何不同？
-**解答**：
-- **Schema-based**：為每家餐廳創建獨立 schema，數據完全隔離。
-- **對比**：
-  - **優點**：更高安全性，適合高階餐飲品牌；便於單餐廳數據備份。
-  - **缺點**：管理成本高，跨餐廳分析較複雜。
-- **當前 row-based**：單一 schema 透過 `tenant_id` 隔離，適合中小餐廳快速部署。
-- **應用場景**：Schema-based 適用於大型連鎖品牌，row-based 適合美食街或校園餐廳。
-
-### 問題 7：如何確保程式碼品質？
-**解答**：
-- **規範**：遵循 Laravel 最佳實踐與 PSR-12，確保程式碼一致性。
-- **測試**：撰寫 PHPUnit 測試，驗證租戶隔離與訂單邏輯，保障餐飲功能穩定。
-- **CI/CD**：GitHub Actions 自動運行測試，確保新程式碼不影響點餐系統。
-- **文件**：提供 OpenAPI 文件與註解，方便餐飲科技團隊維護。
-
-## 關鍵程式碼片段
-
-以下為核心程式碼，展示多租戶、模組化與監控實現，適用於餐飲科技場景：
-
-### 1. 多租戶中間件（`SetTenantFromDomain.php`）
-解析子域名，支援多餐廳數據隔離。
-
-```php
-<?php
-namespace App\Http\Middleware;
-
-use Closure;
-use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
-use App\Models\Tenant;
-
-class SetTenantFromDomain
-{
-    public function handle(Request $request, Closure $next): Response
-    {
-        // 解析子域名（如 restaurant1.localhost）
-        $host = $request->getHost();
-        $subdomain = explode('.', $host)[0];
-        
-        // 查詢餐廳租戶並注入 tenant_id
-        $tenant = Tenant::where('domain', $subdomain)->first();
-        if ($tenant) {
-            $request->attributes->add(['tenant_id' => $tenant->id]);
-            \Log::info('Tenant set for request: ' . $subdomain);
-        } else {
-            \Log::warning('No tenant found for domain: ' . $subdomain);
-        }
-        
-        return $next($request);
-    }
-}
+## 執行測試
+運行後端的 PHPUnit 測試：
+```bash
+cd backend
+docker-compose exec backend vendor/bin/phpunit
 ```
 
-### 2. 商品模型（`Product.php`）
-自動過濾餐廳商品數據。
+## 關鍵代碼片段（帶註解）
 
+以下是一些關鍵代碼片段，選自倉庫中的核心代碼，並添加了詳細的中文註解以便理解：
+
+### 1. 叫號系統控制器 (`QueueController.php`)
 ```php
 <?php
-namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Builder;
-
-class Product extends Model
-{
-    use HasFactory;
-
-    protected $fillable = [
-        'tenant_id',
-        'name',
-        'description',
-        'price',
-    ];
-
-    protected static function booted()
-    {
-        // 自動為查詢添加餐廳 tenant_id 過濾
-        static::addGlobalScope('tenant_id', function (Builder $builder) {
-            if ($tenantId = request()->attributes->get('tenant_id')) {
-                $builder->where('tenant_id', $tenantId);
-            }
-        });
-    }
-}
-```
-
-### 3. 推薦控制器（`RecommendationController.php`）
-模擬餐廳熱門餐點推薦。
-
-```php
-<?php
 namespace App\Http\Controllers;
 
-use App\Models\Product;
+use App\Models\Queue;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use App\Events\QueueUpdated;
 
-class RecommendationController extends Controller
+class QueueController extends Controller
 {
-    public function index(Request $request)
+    /**
+     * 公開叫號狀態端點，無需認證即可訪問
+     * 返回當前服務中的號碼和等待清單
+     */
+    public function publicQueue()
     {
-        // 檢查餐廳租戶上下文
-        $tenantId = $request->attributes->get('tenant_id');
-        if (!$tenantId) {
-            return response()->json(['error' => 'Tenant context not found.'], 404);
-        }
-        
-        // 推薦熱門餐點（基於銷量）
-        $popularProducts = Product::where('tenant_id', $tenantId)
-            ->join('order_items', 'products.id', '=', 'order_items.product_id')
-            ->select('products.*', \DB::raw('SUM(order_items.quantity) as total_sold'))
-            ->groupBy('products.id', 'products.tenant_id', 'products.name', 'products.description', 'products.price', 'products.created_at', 'products.updated_at')
-            ->orderByRaw('SUM(order_items.quantity) DESC')
-            ->take(3)
-            ->get();
-            
-        return response()->json($popularProducts);
+        // 查詢狀態為「等待」的號碼，按創建時間排序，最多返回 10 個
+        $next_numbers = DB::table('queues')
+                          ->where('status', 'waiting')
+                          ->orderBy('created_at', 'asc')
+                          ->limit(10)
+                          ->get(['id', 'queue_number', 'status']);
+
+        // 查詢當前服務中的號碼（最新更新的）
+        $serving_number = DB::table('queues')
+                            ->where('status', 'serving')
+                            ->orderBy('updated_at', 'desc')
+                            ->first(['id', 'queue_number', 'status']);
+
+        // 返回 JSON 格式的響應，包含當前服務號碼和等待清單
+        return response()->json([
+            'currently_serving' => $serving_number ? $serving_number->queue_number : null,
+            'waiting_list' => $next_numbers,
+        ]);
+    }
+
+    /**
+     * 前進叫號（需要認證，僅限管理員）
+     * 將第一個等待號碼設置為服務中，並廣播更新
+     */
+    public function advanceQueue(Request $request)
+    {
+        // 使用事務確保資料一致性
+        DB::transaction(function () {
+            // 查詢第一個等待中的號碼
+            $nextWaiting = DB::table('queues')
+                             ->where('status', 'waiting')
+                             ->orderBy('created_at', 'asc')
+                             ->first();
+
+            if ($nextWaiting) {
+                // 將當前服務中的號碼設為「已完成」
+                DB::table('queues')->where('status', 'serving')->update(['status' => 'completed']);
+                // 將下一個等待號碼設為「服務中」
+                DB::table('queues')->where('id', $nextWaiting->id)->update(['status' => 'serving']);
+
+                // 獲取更新後的服務號碼和等待清單
+                $newServing = DB::table('queues')->where('id', $nextWaiting->id)->first();
+                $waitingList = DB::table('queues')->where('status', 'waiting')->orderBy('created_at', 'asc')->limit(10)->get();
+                
+                // 透過 WebSocket 廣播更新給所有客戶端（除了發起者）
+                broadcast(new QueueUpdated([
+                    'currently_serving' => $newServing->queue_number,
+                    'waiting_list' => $waitingList
+                ]))->toOthers();
+            }
+        });
+
+        // 返回成功訊息
+        return response()->json(['message' => 'Queue advanced.']);
+    }
+
+    /**
+     * 添加新叫號（範例實現）
+     * 生成隨機號碼並加入等待清單
+     */
+    public function addNumber(Request $request)
+    {
+        // 生成隨機叫號（僅為演示，實際應用應使用更穩定的邏輯）
+        $newNumber = rand(100, 999);
+        DB::table('queues')->insert([
+            'queue_number' => $newNumber,
+            'status' => 'waiting',
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+        return response()->json(['message' => 'Number added to queue.', 'number' => $newNumber]);
     }
 }
 ```
 
-### 4. 插件管理器（`PluginManager.php`）
-支援餐飲插件（如叫號系統、金流）。
+**代碼說明**：
+- `publicQueue`：公開端點，無需認證，供餐廳公開顯示叫號狀態，模擬餐廳叫號螢幕。
+- `advanceQueue`：管理員專用，推進叫號流程，使用事務確保資料一致性，並透過 WebSocket 即時通知更新。
+- `addNumber`：簡單的範例功能，模擬顧客取號。
 
+### 2. 桌位管理控制器 (`TableController.php`)
 ```php
 <?php
-namespace App\Services;
 
-use Illuminate\Support\Facades\Log;
+namespace App\Http\Controllers;
 
-class PluginManager
+use App\Models\Table;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
+
+class TableController extends Controller
 {
-    protected array $plugins = [];
-
-    public function registerPlugin(string $pluginName, array $config)
+    /**
+     * 獲取所有桌位（僅限授權用戶）
+     * 返回租戶下的所有桌位資料
+     */
+    public function index()
     {
-        // 註冊插件（如叫號系統）
-        $this->plugins[$pluginName] = $config;
-        Log::info("Plugin '{$pluginName}' registered with config: " . json_encode($config));
+        // 使用 Gate 檢查用戶是否有權限查看桌位
+        Gate::authorize('viewAny', Table::class);
+        return Table::all();
     }
 
-    public function executeHook(string $hook, array $data)
+    /**
+     * 顯示單一桌位詳情
+     * 需要授權，確保用戶有權限查看特定桌位
+     */
+    public function show(Table $table)
     {
-        // 執行插件鉤子（如訂單完成後發送通知）
-        Log::info("Executing hook '{$hook}' with data: " . json_encode($data));
-        foreach ($this->plugins as $pluginName => $config) {
-            Log::info("  -> Hook '{$hook}' triggered for plugin '{$pluginName}'");
-        }
+        Gate::authorize('view', $table);
+        return $table;
+    }
+
+    /**
+     * 創建新桌位
+     * 驗證輸入並確保桌號唯一
+     */
+    public function store(Request $request)
+    {
+        Gate::authorize('create', Table::class);
+
+        // 驗證輸入資料
+        $validated = $request->validate([
+            'number' => 'required|string|max:255|unique:tables,number',
+            'capacity' => 'required|integer|min:1',
+            'status' => 'required|in:available,occupied,reserved,cleaning'
+        ]);
+
+        // 創建桌位並返回
+        return Table::create($validated);
+    }
+
+    /**
+     * 更新桌位資料
+     * 允許部分更新，確保桌號唯一性
+     */
+    public function update(Request $request, Table $table)
+    {
+        Gate::authorize('update', $table);
+
+        $validated = $request->validate([
+            'number' => 'sometimes|required|string|max:255|unique:tables,number,' . $table->id,
+            'capacity' => 'sometimes|required|integer|min:1',
+            'status' => 'sometimes|required|in:available,occupied,reserved,cleaning'
+        ]);
+
+        $table->update($validated);
+        return $table;
+    }
+
+    /**
+     * 刪除桌位
+     * 僅限授權用戶執行
+     */
+    public function destroy(Table $table)
+    {
+        Gate::authorize('delete', $table);
+        $table->delete();
+        return response()->noContent();
     }
 }
 ```
 
-### 5. Prometheus 監控中間件（`RecordMetrics.php`）
-監控點餐 API 流量。
+**代碼說明**：
+- 使用 `Gate` 進行權限檢查，確保只有授權用戶（例如管理員）可以管理桌位。
+- 支援完整的 CRUD 操作，包含輸入驗證和唯一性檢查。
+- `status` 欄位支援餐飲業常見的桌位狀態，適合內用場景。
 
+### 3. 前端公開叫號顯示組件 (`QueueDisplay.vue`)
+```vue
+<template>
+  <div class="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
+    <div class="text-center p-8 bg-gray-800 rounded-lg shadow-2xl w-full max-w-4xl mx-auto">
+      <h1 class="text-6xl font-extrabold mb-8 animate-pulse">{{ $t('queue.title') }}</h1>
+
+      <div class="mb-12">
+        <p class="text-4xl font-semibold mb-4 text-gray-400">{{ $t('queue.currently_serving') }}</p>
+        <div class="bg-indigo-600 p-8 rounded-full shadow-inner border-4 border-indigo-400 transform transition-transform duration-500 hover:scale-105">
+          <p v-if="currentlyServing" class="text-8xl font-black text-white tracking-widest">{{ currentlyServing }}</p>
+          <p v-else class="text-6xl font-black text-gray-300">{{ $t('queue.no_number') }}</p>
+        </div>
+      </div>
+
+      <div>
+        <p class="text-3xl font-semibold mb-6 text-gray-400">{{ $t('queue.waiting_list') }}</p>
+        <div v-if="waitingList.length > 0" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-6">
+          <div
+            v-for="item in waitingList"
+            :key="item.id"
+            class="bg-gray-700 p-6 rounded-xl shadow-lg border-2 border-gray-600 transition-all duration-300 hover:shadow-xl hover:bg-gray-600"
+          >
+            <p class="text-5xl font-bold text-teal-400">{{ item.queue_number }}</p>
+          </div>
+        </div>
+        <p v-else class="text-4xl text-gray-500 italic mt-8">{{ $t('queue.no_waiting') }}</p>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+const currentlyServing = ref(null); // 當前服務中的號碼
+const waitingList = ref([]); // 等待清單
+
+// 獲取叫號狀態的函數
+const fetchQueueStatus = async () => {
+  try {
+    const response = await fetch('/api/queue/public'); // 調用公開叫號 API
+    const data = await response.json();
+    currentlyServing.value = data.currently_serving;
+    waitingList.value = data.waiting_list;
+  } catch (error) {
+    console.error("Failed to fetch queue status:", error);
+  }
+};
+
+// 在組件掛載時獲取初始狀態
+onMounted(() => {
+  fetchQueueStatus();
+
+  // 以下為 WebSocket 監聽範例（已註解，需配置 Pusher/Echo）
+  // window.Echo = new Echo({
+  //   broadcaster: 'pusher',
+  //   key: import.meta.env.VITE_WEBSOCKET_APP_KEY,
+  //   cluster: import.meta.env.VITE_WEBSOCKET_APP_CLUSTER ?? 'mt1',
+  //   wsHost: import.meta.env.VITE_WEBSOCKET_HOST ? import.meta.env.VITE_WEBSOCKET_HOST : `ws-${window.location.hostname}`,
+  //   wsPort: import.meta.env.VITE_WEBSOCKET_PORT ?? 6001,
+  //   wssPort: import.meta.env.VITE_WEBSOCKET_PORT ?? 6001,
+  //   forceTLS: import.meta.env.VITE_WEBSOCKET_FORCE_TLS ?? false,
+  //   enabledTransports: ['ws', 'wss'],
+  // });
+  //
+  // window.Echo.channel('public-queue')
+  //   .listen('.queue.updated', (e) => {
+  //     console.log('Real-time queue update received:', e);
+  //     currentlyServing.value = e.queue.currently_serving;
+  //     waitingList.value = e.queue.waiting_list;
+  //   });
+});
+
+// 組件卸載時清理 WebSocket 連線
+onUnmounted(() => {
+  // window.Echo.leave('public-queue');
+});
+</script>
+
+<style scoped>
+/* 自訂樣式 */
+</style>
+```
+
+**代碼說明**：
+- 使用 Tailwind CSS 打造現代化的叫號顯示界面，顯示當前服務號碼和等待清單。
+- 支援多語言（透過 `vue-i18n`），預設為繁體中文。
+- 包含 WebSocket 監聽的範例程式碼（已註解），可與後端的 `QueueUpdated` 事件整合。
+
+### 4. 監控中介軟體 (`RecordMetrics.php`)
 ```php
 <?php
+
 namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 use Prometheus\CollectorRegistry;
 use Prometheus\Storage\Redis;
-use Symfony\Component\HttpFoundation\Response;
 
 class RecordMetrics
 {
+    /**
+     * 處理 HTTP 請求並記錄監控指標
+     * 將 HTTP 請求計數記錄到 Prometheus
+     */
     public function handle(Request $request, Closure $next): Response
     {
-        $response = $next($request);
+        $response = $next($request); // 執行下一個中介軟體或控制器
 
         try {
-            // 使用 Redis 儲存監控指標
+            // 使用 Redis 作為 Prometheus 儲存後端
             $registry = CollectorRegistry::getInstance(new Redis(['host' => env('REDIS_HOST', 'redis')]));
 
-            // 記錄點餐 API 請求
+            // 記錄 HTTP 請求總數，包含方法、路徑和狀態碼
             $counter = $registry->getOrRegisterCounter(
-                'ecommerce_platform',
-                'http_requests_total',
-                'Total HTTP requests to the application',
-                ['method', 'endpoint', 'status_code']
+                'ecommerce_platform', // 名稱空間
+                'http_requests_total', // 指標名稱
+                'Total HTTP requests to the application', // 描述
+                ['method', 'endpoint', 'status_code'] // 標籤
             );
             $counter->inc([$request->method(), $request->path(), (string) $response->getStatusCode()]);
         } catch (\Throwable $e) {
+            // 記錄監控失敗的日誌，確保系統穩定性
             \Log::error('Prometheus metric recording failed: ' . $e->getMessage());
         }
 
@@ -372,28 +476,56 @@ class RecordMetrics
 }
 ```
 
-## API 文件
-位於 `docs/api.yaml`，採用 OpenAPI 3.0，涵蓋租戶、商品、訂單、支付與推薦 API，支援餐飲平台開發。
+**代碼說明**：
+- 記錄每個 HTTP 請求的指標（方法、路徑、狀態碼），並儲存到 Redis 以供 Prometheus 收集。
+- 異常處理確保監控失敗不會影響應用程式運行。
+- 可與 Grafana 整合，展示 API 請求的效能數據。
 
-## 測試覆蓋
-包含 PHPUnit 測試，驗證餐廳數據隔離與訂單邏輯：
-- `ProductControllerTest.php`：測試餐廳商品隔離。
-- `OrderControllerTest.php`：測試點餐流程。
-- 執行測試：
-  ```bash
-  cd backend
-  vendor/bin/phpunit
-  ```
+## 開發
+- **後端**：在 `backend` 目錄中修改 Laravel 程式碼，使用 `php artisan` 命令進行遷移、種子數據等操作。
+- **前端**：在 `frontend/src` 目錄中開發 Vue.js 組件，運行 `npm run dev` 啟動開發服務器。
+- **API 文件**：更新 `docs/api.yaml` 以反映新的端點或更改。
 
-## 未來改進
-- 整合 ECPay 等金流，支援餐飲支付。
-- 開發叫號系統 API，優化餐廳運營。
-- 使用 FastAPI 與機器學習，實現顧客行為分析與個人化推薦。
-- 支援 schema-based 多租戶，提升大型連鎖餐廳安全性。
+## 目錄結構
+```
+ECommerceTenancy/
+├── backend/                    # Laravel 後端核心代碼（需整合至新 Laravel 專案）
+│   ├── app/
+│   │   ├── Http/
+│   │   │   ├── Controllers/   # API 控制器（認證、產品、叫號等）
+│   │   │   ├── Middleware/    # 自訂中介軟體（例如 RecordMetrics）
+│   │   ├── Models/           # Eloquent 模型（User、Tenant、Product 等）
+│   │   ├── Services/         # 插件管理（例如通知）
+│   │   ├── Events/           # WebSocket 事件（例如 QueueUpdated）
+│   │   ├── Providers/        # 服務提供者（例如 BroadcastServiceProvider）
+│   ├── database/
+│   │   ├── migrations/       # 資料庫遷移
+│   │   ├── seeders/          # 資料庫種子數據
+│   ├── tests/Feature/        # PHPUnit 測試
+├── frontend/                   # Vue.js 前端
+│   ├── src/
+│   │   ├── api/              # API 客戶端程式碼
+│   │   ├── components/       # Vue 組件（例如 TableManagement、QueueDisplay）
+│   │   ├── views/            # 頁面組件
+│   │   ├── router/           # Vue Router 配置
+│   │   ├── locales/          # i18n 翻譯
+├── monitoring/                 # 監控配置
+│   ├── nginx.conf            # Nginx 網關配置
+│   ├── fluentd.conf          # Fluentd 日誌配置
+│   ├── loki-config.yml       # Loki 配置
+│   ├── prometheus.yml        # Prometheus 配置
+├── docs/                      # API 文件
+│   ├── api.yaml              # OpenAPI 規範
+├── docker-compose.yml          # Docker Compose 配置
+├── .github/workflows/ci.yml    # CI/CD 管道
+```
 
-## 注意事項
-- 需自行安裝依賴與配置子域名（如 `restaurant1.localhost`）。
-- Grafana 儀表板需額外配置以展示監控效果。
+## 貢獻
+1. Fork 本倉庫。
+2. 創建功能分支（`git checkout -b feature/new-feature`）。
+3. 提交更改（`git commit -m "Add new feature"`）。
+4. 推送分支（`git push origin feature/new-feature`）。
+5. 創建 Pull Request。
 
-## 授權
-MIT
+## 許可證
+本項目採用 MIT 許可證。
